@@ -5,7 +5,7 @@ import { db } from "@/lib/firebase-admin";
 import { getRandomInterviewCover } from "@/lib/utils";
 
 // Helper: retry a function with exponential backoff
-async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 5000): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2, initialDelay = 35000): Promise<T> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     // Generate questions with retry logic for rate limiting
     const { text: questions } = await withRetry(() =>
       generateText({
-        model: google("gemini-2.0-flash-lite"),
+        model: google("gemini-2.0-flash"),
         prompt: `Prepare questions for a job interview.
           The job role is ${role}.
           The job experience level is ${level}.
