@@ -16,7 +16,14 @@ export async function POST(request: Request) {
     // If it's a Vapi Server URL message, extract the actual data
     if (message?.type === "end-of-call-report") {
       console.log("Detected end-of-call-report");
-      const structuredData = message.call?.analysis?.structuredData || {};
+      let structuredData = message.call?.analysis?.structuredData || {};
+      
+      // If Vapi nested the output under a schema name (e.g. "interview_setup_data")
+      const keys = Object.keys(structuredData);
+      if (keys.length === 1 && typeof structuredData[keys[0]] === "object" && structuredData[keys[0]] !== null && !Array.isArray(structuredData[keys[0]])) {
+        structuredData = structuredData[keys[0]];
+      }
+      
       payload = {
         ...structuredData,
         userid: message.call?.variableValues?.userid,
