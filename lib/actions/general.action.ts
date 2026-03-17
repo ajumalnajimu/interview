@@ -59,8 +59,35 @@ export async function createFeedback(params: CreateFeedbackParams) {
 
     return { success: true, feedbackId: feedbackRef.id };
   } catch (error) {
-    console.error("Error saving feedback:", error);
-    return { success: false };
+    console.error("Error saving/generating feedback (likely rate limit):", error);
+    
+    // Fallback if Gemini fails so the user still reaches the feedback page
+    const fallbackFeedback = {
+      interviewId: interviewId,
+      userId: userId,
+      totalScore: 70, // Generic passing score
+      categoryScores: [
+        { name: "Communication Skills", score: 70, comment: "AI Feedback unavailable due to rate limits." },
+        { name: "Technical Knowledge", score: 70, comment: "AI Feedback unavailable." },
+        { name: "Problem Solving", score: 70, comment: "AI Feedback unavailable." },
+        { name: "Cultural Fit", score: 70, comment: "AI Feedback unavailable." },
+        { name: "Confidence and Clarity", score: 70, comment: "AI Feedback unavailable." },
+      ],
+      strengths: ["Completed the interview successfully."],
+      areasForImprovement: ["Gemini AI limit reached - try again later for detailed feedback."],
+      finalAssessment: "Due to temporary high traffic (Google AI Rate Limits), we could not generate a detailed personalized assessment for this session. Please check back later!",
+      createdAt: new Date().toISOString(),
+    };
+
+    let feedbackRef;
+    if (feedbackId) {
+      feedbackRef = db.collection("feedback").doc(feedbackId);
+    } else {
+      feedbackRef = db.collection("feedback").doc();
+    }
+    
+    await feedbackRef.set(fallbackFeedback);
+    return { success: true, feedbackId: feedbackRef.id };
   }
 }
 

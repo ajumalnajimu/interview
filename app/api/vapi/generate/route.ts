@@ -57,36 +57,49 @@ export async function POST(request: Request) {
       return Response.json({ success: false, error: "Missing data" }, { status: 400 });
     }
 
-    // Generate questions with retry logic for rate limiting
-    const { text: questions } = await withRetry(() =>
-      generateText({
-        model: google("gemini-2.0-flash"),
-        prompt: `Prepare questions for a job interview.
-          The job role is ${role}.
-          The job experience level is ${level}.
-          The tech stack used in the job is: ${techstack}.
-          The focus between behavioural and technical questions should lean towards: ${type}.
-          The amount of questions required is: ${amount || 5}.
-          Please return only the questions, without any additional text.
-          The questions are going to be read by a voice assistant so do not use "/" or "*" or any other special characters which might break the voice assistant.
-          Return the questions formatted like this:
-          ["Question 1", "Question 2", "Question 3"]
-      `,
-      })
-    );
+    let questionsText = "";
+    try {
+      // Generate questions with retry logic for rate limiting
+      const response = await withRetry(() =>
+        generateText({
+          model: google("gemini-2.0-flash"),
+          prompt: `Prepare questions for a job interview.
+            The job role is ${role}.
+            The job experience level is ${level}.
+            The tech stack used in the job is: ${techstack}.
+            The focus between behavioural and technical questions should lean towards: ${type}.
+            The amount of questions required is: ${amount || 5}.
+            Please return only the questions, without any additional text.
+            The questions are going to be read by a voice assistant so do not use "/" or "*" or any other special characters which might break the voice assistant.
+            Return the questions formatted like this:
+            ["Question 1", "Question 2", "Question 3"]
+        `,
+        })
+      );
+      questionsText = response.text;
+    } catch (apiError: any) {
+      console.error("Gemini API failed or rate-limited. Using fallback questions:", apiError.message);
+      questionsText = JSON.stringify([
+        `Can you tell me about your background and experience as a ${level} ${role}?`,
+        `What is the most challenging project you have worked on using ${techstack}?`,
+        "How do you handle disagreements with team members or stakeholders?",
+        "Can you describe a time when you had to learn a new technology quickly?",
+        "What are your greatest strengths and weaknesses?"
+      ]);
+    }
 
-    console.log("Generated Questions:", questions);
+    console.log("Generated Questions:", questionsText);
 
     // Parse questions safely - handle markdown code blocks
     let parsedQuestions;
     try {
       // Strip markdown code fences if present (e.g. ```json\n[...]\n```)
-      const cleaned = questions.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+      const cleaned = questionsText.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
       parsedQuestions = JSON.parse(cleaned);
     } catch {
-      console.error("Failed to parse questions JSON, using raw split. Raw:", questions);
+      console.error("Failed to parse questions JSON, using raw split. Raw:", questionsText);
       // Fallback: split by newline and clean up
-      parsedQuestions = questions
+      parsedQuestions = questionsText
         .split("\n")
         .map((q) => q.replace(/^[\d\-\.\)]+\s*/, "").trim())
         .filter((q) => q.length > 0);
