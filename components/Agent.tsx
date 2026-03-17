@@ -8,9 +8,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import getVapiInstance from "@/lib/vapi.sdk";
 import { interviewer } from "@/constants";
-import { createFeedback } from "@/lib/actions/general.action";
-
-const GENERATOR_ASSISTANT_ID = process.env.NEXT_PUBLIC_VAPI_GENERATOR_ID!;
+import { createInterviewAndFeedback } from "@/lib/actions/general.action";
 
 enum CallStatus {
   INACTIVE = "INACTIVE",
@@ -24,19 +22,13 @@ interface SavedMessage {
   content: string;
 }
 
-const Agent = ({
-  userName,
-  userId,
-  interviewId,
-  feedbackId,
-  type,
-  questions,
-}: AgentProps) => {
+const Agent = ({ userName, userId }: AgentProps) => {
   const router = useRouter();
   const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
   const [messages, setMessages] = useState<SavedMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastMessage, setLastMessage] = useState<string>("");
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     const vapi = getVapiInstance();
@@ -92,32 +84,32 @@ const Agent = ({
       setLastMessage(messages[messages.length - 1].content);
     }
 
-    const handleGenerateFeedback = async (messages: SavedMessage[]) => {
-      console.log("handleGenerateFeedback");
+    const handlePostCall = async () => {
+      if (callStatus !== CallStatus.FINISHED || messages.length === 0 || isProcessing) return;
 
-      const { success, feedbackId: id } = await createFeedback({
-        interviewId: interviewId!,
-        userId: userId!,
-        transcript: messages,
-        feedbackId,
-      });
+      setIsProcessing(true);
 
-      if (success && id) {
-        router.push(`/interview/${interviewId}/feedback`);
-      } else {
-        console.log("Error saving feedback");
+      try {
+        const result = await createInterviewAndFeedback({
+          userId: userId!,
+          transcript: messages,
+        });
+
+        if (result.success && result.interviewId) {
+          router.push(`/interview/${result.interviewId}/feedback`);
+        } else {
+          toast.error("Something went wrong generating your feedback.");
+          router.push("/");
+        }
+      } catch (error) {
+        console.error("Error processing interview:", error);
+        toast.error("Failed to generate feedback. Please try again.");
         router.push("/");
       }
     };
 
-    if (callStatus === CallStatus.FINISHED) {
-      if (type === "generate") {
-        router.push("/");
-      } else {
-        handleGenerateFeedback(messages);
-      }
-    }
-  }, [messages, callStatus, feedbackId, interviewId, router, type, userId]);
+    handlePostCall();
+  }, [messages, callStatus, isProcessing, router, userId]);
 
   const handleCall = async () => {
     setCallStatus(CallStatus.CONNECTING);
@@ -135,45 +127,8 @@ const Agent = ({
 
       const vapi = getVapiInstance();
 
-      if (type === "generate") {
-        // Use the Generator Assistant (configured in Vapi Dashboard)
-        await vapi.start(GENERATOR_ASSISTANT_ID, {
-          variableValues: {
-            username: userName,
-            userid: userId,
-          },
-        });
-      } else {
-        // Build inline assistant config with questions injected
-        let formattedQuestions = "";
-        if (questions) {
-          formattedQuestions = questions
-            .map((question) => `- ${question}`)
-            .join("\n");
-        }
-
-        const originalPrompt =
-          (interviewer.model?.messages?.[0] as any)?.content ?? "";
-        const resolvedPrompt = originalPrompt.replace(
-          "{{questions}}",
-          formattedQuestions
-        );
-
-        const assistantConfig = {
-          ...interviewer,
-          model: {
-            ...interviewer.model!,
-            messages: [
-              {
-                role: "system" as const,
-                content: resolvedPrompt,
-              },
-            ],
-          },
-        };
-
-        await vapi.start(assistantConfig as any);
-      }
+      // Single inline assistant — handles setup + interview in one call
+      await vapi.start(interviewer as any);
     } catch (err: any) {
       console.error("Error starting Vapi call:", err);
       const msg = err?.message || (typeof err === "string" ? err : "Unknown error occurred");
@@ -236,9 +191,18 @@ const Agent = ({
         </div>
       )}
 
-      <div className="w-full flex justify-center">
-        {callStatus !== "ACTIVE" ? (
-          <button className="relative btn-call" onClick={() => handleCall()}>
+      <div className="w-full flex justify-center mt-6">
+        {isProcessing ? (
+          <div className="flex flex-col items-center gap-4 mt-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <p className="font-medium animate-pulse text-lg">Generating your feedback...</p>
+          </div>
+        ) : callStatus !== "ACTIVE" ? (
+          <button
+            className="relative btn-call"
+            onClick={() => handleCall()}
+            disabled={callStatus === "CONNECTING"}
+          >
             <span
               className={cn(
                 "absolute animate-ping rounded-full opacity-75",

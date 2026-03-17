@@ -12,6 +12,10 @@ interface Feedback {
   areasForImprovement: string[];
   finalAssessment: string;
   createdAt: string;
+  questionAnswers?: Array<{
+    question: string;
+    answer: string;
+  }>;
 }
 
 interface Interview {
@@ -31,6 +35,7 @@ interface CreateFeedbackParams {
   interviewId: string;
   userId: string;
   transcript: { role: string; content: string }[];
+  questions?: string[];
   feedbackId?: string;
 }
 
@@ -52,10 +57,6 @@ interface InterviewCardProps {
 interface AgentProps {
   userName: string;
   userId?: string;
-  interviewId?: string;
-  feedbackId?: string;
-  type: "generate" | "interview";
-  questions?: string[];
 }
 
 interface RouteParams {

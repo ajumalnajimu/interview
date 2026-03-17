@@ -111,10 +111,10 @@ export default async function InterviewCard({
               href={
                 feedback
                   ? `/interview/${interviewId}/feedback`
-                  : `/interview/${interviewId}`
+                  : `#`
               }
             >
-              {feedback ? "View Feedback" : "Take Interview"}
+              {feedback ? "View Feedback" : "Processing..."}
             </Link>
           </Button>
         </div>

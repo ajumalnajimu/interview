@@ -2,8 +2,13 @@ import dayjs from "dayjs";
 import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
-
 import { Button } from "@/components/ui/button";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import {
   getFeedbackByInterviewId,
@@ -89,26 +94,35 @@ export default async function FeedbackPage({ params }: RouteParams) {
         </ul>
       </div>
 
-      <div className="buttons">
-        <Button className="btn-secondary flex-1">
+      {feedback?.questionAnswers && feedback.questionAnswers.length > 0 && (
+        <div className="flex flex-col gap-4 mt-4">
+          <h2>Questions & Ideal Answers</h2>
+          <Accordion type="single" collapsible className="w-full">
+            {feedback.questionAnswers.map((qa, index) => (
+              <AccordionItem key={index} value={`item-${index}`} className="border-dark-300">
+                <AccordionTrigger className="text-left font-semibold text-lg hover:no-underline">
+                  {index + 1}. {qa.question}
+                </AccordionTrigger>
+                <AccordionContent className="text-light-100/80 leading-relaxed bg-dark-200 p-4 rounded-md">
+                  <span className="text-primary-200 font-bold mb-2 block">Ideal Talking Points:</span>
+                  {qa.answer}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </div>
+      )}
+
+      <div className="buttons mt-8">
+        <Button className="btn-primary w-full max-w-sm mx-auto">
           <Link href="/" className="flex w-full justify-center">
-            <p className="text-sm font-semibold text-primary-200 text-center">
+            <p className="text-sm font-semibold text-black text-center">
               Back to dashboard
             </p>
           </Link>
         </Button>
-
-        <Button className="btn-primary flex-1">
-          <Link
-            href={`/interview/${id}`}
-            className="flex w-full justify-center"
-          >
-            <p className="text-sm font-semibold text-black text-center">
-              Retake Interview
-            </p>
-          </Link>
-        </Button>
       </div>
+
     </section>
   );
 }
