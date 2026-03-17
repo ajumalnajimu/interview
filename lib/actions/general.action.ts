@@ -186,7 +186,7 @@ export async function createFeedback(params: CreateFeedbackParams) {
     return { success: true, feedbackId: feedbackRef.id };
   } catch (error) {
     console.error("Error saving/generating feedback (likely rate limit):", error);
-    
+
     // Fallback if Gemini fails so the user still reaches the feedback page
     const fallbackFeedback = {
       interviewId: interviewId,
@@ -212,7 +212,7 @@ export async function createFeedback(params: CreateFeedbackParams) {
     } else {
       feedbackRef = db.collection("feedback").doc();
     }
-    
+
     await feedbackRef.set(fallbackFeedback);
     return { success: true, feedbackId: feedbackRef.id };
   }
