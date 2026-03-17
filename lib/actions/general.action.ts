@@ -29,14 +29,25 @@ export async function createInterviewAndFeedback({
     });
     interviewMeta = object;
   } catch (error) {
-    console.error("Error extracting interview metadata:", error);
-    interviewMeta = {
-      role: "Software Engineer",
-      level: "Mid",
-      type: "Mixed",
-      techstack: [],
-      questions: [],
-    };
+    console.error("Error extracting interview metadata (likely rate limit):", error);
+    try {
+      const { object: fallbackMeta } = await generateObject({
+        model: google("gemini-2.5-flash"), // using a lighter model as fallback
+        schema: interviewAnalysisSchema,
+        prompt: `Analyze the following interview transcript and extract the interview setup details and the exact questions that the interviewer asked the candidate. Only include the actual interview questions, not the setup/collection questions.\n\nTranscript:\n${formattedTranscript}`,
+        system: "You are an expert at analyzing interview transcripts to extract structured data.",
+      });
+      interviewMeta = fallbackMeta;
+    } catch (fallbackError) {
+      console.error("Fallback metadata extraction also failed:", fallbackError);
+      interviewMeta = {
+        role: "Software Engineer",
+        level: "Mid",
+        type: "Mixed",
+        techstack: [],
+        questions: [],
+      };
+    }
   }
 
   // Step 2: Save interview to Firestore
