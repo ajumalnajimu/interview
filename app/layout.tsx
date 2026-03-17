@@ -11,6 +11,9 @@ const monaSans = Mona_Sans({
 export const metadata: Metadata = {
   title: "Prepwise",
   description: "An AI-powered interview preparation platform",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({

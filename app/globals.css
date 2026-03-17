@@ -219,3 +219,11 @@
 .animate-fadeIn {
   animation: fadeIn 0.3s ease-in-out;
 }
+
+@layer utilities {
+  .pattern {
+    background-image: url("/pattern.png");
+    background-repeat: repeat;
+    background-attachment: fixed;
+  }
+}

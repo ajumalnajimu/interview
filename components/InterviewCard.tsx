@@ -13,6 +13,7 @@ export default async function InterviewCard({
   type,
   techstack,
   createdAt,
+  coverImage,
 }: InterviewCardProps) {
   const feedback =
     interviewId && userId
@@ -50,7 +51,7 @@ export default async function InterviewCard({
 
           {/* Cover Image */}
           <Image
-            src={`/covers${techstack.length > 0 ? `/default.png` : `/default.png`}`}
+            src={coverImage || "/covers/adobe.png"}
             alt="cover"
             width={90}
             height={90}
