@@ -205,7 +205,7 @@ export const feedbackSchema = z.object({
   questionAnswers: z.array(z.object({
     question: z.string(),
     answer: z.string(),
-  })).optional(),
+  })),
 });
 
 export const interviewCovers = [

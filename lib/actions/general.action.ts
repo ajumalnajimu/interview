@@ -98,21 +98,49 @@ export async function createInterviewAndFeedback({
     });
     feedbackData = object;
   } catch (error) {
-    console.error("Error generating feedback:", error);
-    feedbackData = {
-      totalScore: 70,
-      categoryScores: [
-        { name: "Communication Skills", score: 70, comment: "AI Feedback unavailable due to rate limits." },
-        { name: "Technical Knowledge", score: 70, comment: "AI Feedback unavailable." },
-        { name: "Problem Solving", score: 70, comment: "AI Feedback unavailable." },
-        { name: "Cultural Fit", score: 70, comment: "AI Feedback unavailable." },
-        { name: "Confidence and Clarity", score: 70, comment: "AI Feedback unavailable." },
-      ],
-      strengths: ["Completed the interview successfully."],
-      areasForImprovement: ["AI limit reached - try again later for detailed feedback."],
-      finalAssessment: "Due to temporary high traffic we could not generate a detailed assessment. Please try again later!",
-      questionAnswers: interviewMeta.questions.map((q: string) => ({ question: q, answer: "Ideal answer unavailable due to AI limits." })),
-    };
+    console.error("Error generating feedback (likely rate limit):", error);
+    try {
+      const { object: fallbackObject } = await generateObject({
+        model: google("gemini-2.5-flash"), // using a lighter model as fallback
+        schema: feedbackSchema,
+        prompt: `
+        You are an AI interviewer analyzing a mock interview. Your task is to evaluate the candidate based on structured categories. Be thorough and detailed in your analysis. Don't be lenient with the candidate. If there are mistakes or areas for improvement, point them out.
+        
+        The questions asked were:
+        ${formattedQuestions}
+
+        Transcript:
+        ${formattedTranscript}
+
+        Please score the candidate from 0 to 100 in the following areas. Do not add categories other than the ones provided:
+        - **Communication Skills**: Clarity, articulation, structured responses.
+        - **Technical Knowledge**: Understanding of key concepts for the role.
+        - **Problem-Solving**: Ability to analyze problems and propose solutions.
+        - **Cultural & Role Fit**: Alignment with company values and job role.
+        - **Confidence & Clarity**: Confidence in responses, engagement, and clarity.
+        
+        Additionally, populate the \`questionAnswers\` array. For each interview question asked, provide the exact question text and a concise "ideal answer" or "key talking points" that a strong candidate should have mentioned.
+        `,
+        system: "You are a professional interviewer analyzing a mock interview. Your task is to evaluate the candidate based on structured categories",
+      });
+      feedbackData = fallbackObject;
+    } catch (fallbackError) {
+      console.error("Fallback generation also failed:", fallbackError);
+      feedbackData = {
+        totalScore: 70,
+        categoryScores: [
+          { name: "Communication Skills", score: 70, comment: "AI Feedback unavailable due to rate limits." },
+          { name: "Technical Knowledge", score: 70, comment: "AI Feedback unavailable." },
+          { name: "Problem Solving", score: 70, comment: "AI Feedback unavailable." },
+          { name: "Cultural Fit", score: 70, comment: "AI Feedback unavailable." },
+          { name: "Confidence and Clarity", score: 70, comment: "AI Feedback unavailable." },
+        ],
+        strengths: ["Completed the interview successfully."],
+        areasForImprovement: ["AI limit reached - try again later for detailed feedback."],
+        finalAssessment: "Due to temporary high traffic we could not generate a detailed assessment. Please try again later!",
+        questionAnswers: interviewMeta.questions.map((q: string) => ({ question: q, answer: "Ideal answer unavailable due to AI limits." })),
+      };
+    }
   }
 
   const feedback = {
@@ -198,34 +226,71 @@ export async function createFeedback(params: CreateFeedbackParams) {
   } catch (error) {
     console.error("Error saving/generating feedback (likely rate limit):", error);
 
-    // Fallback if Gemini fails so the user still reaches the feedback page
-    const fallbackFeedback = {
-      interviewId: interviewId,
-      userId: userId,
-      totalScore: 70, // Generic passing score
-      categoryScores: [
-        { name: "Communication Skills", score: 70, comment: "AI Feedback unavailable due to rate limits." },
-        { name: "Technical Knowledge", score: 70, comment: "AI Feedback unavailable." },
-        { name: "Problem Solving", score: 70, comment: "AI Feedback unavailable." },
-        { name: "Cultural Fit", score: 70, comment: "AI Feedback unavailable." },
-        { name: "Confidence and Clarity", score: 70, comment: "AI Feedback unavailable." },
-      ],
-      strengths: ["Completed the interview successfully."],
-      areasForImprovement: ["Gemini AI limit reached - try again later for detailed feedback."],
-      finalAssessment: "Due to temporary high traffic (Google AI Rate Limits), we could not generate a detailed personalized assessment for this session. Please check back later!",
-      questionAnswers: questions ? questions.map(q => ({ question: q, answer: "Ideal answer unavailable due to AI limits." })) : [],
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      const formattedTranscript = transcript
+        .map(
+          (sentence: { role: string; content: string }) =>
+            `- ${sentence.role}: ${sentence.content}\n`
+        )
+        .join("");
 
-    let feedbackRef;
-    if (feedbackId) {
-      feedbackRef = db.collection("feedback").doc(feedbackId);
-    } else {
-      feedbackRef = db.collection("feedback").doc();
+      const formattedQuestions = questions
+        ? questions.map((q, i) => `${i + 1}. ${q}`).join("\n")
+        : "Questions not provided.";
+
+      const { object: fallbackObject } = await generateObject({
+        model: google("gemini-2.5-flash"), // using a lighter model as fallback
+        schema: feedbackSchema,
+        prompt: `Evaluate this mock interview. Provide strict, realistic scores and feedback.\n\nQuestions:\n${formattedQuestions}\n\nTranscript:\n${formattedTranscript}`,
+        system: "You evaluate mock interviews and return structured JSON.",
+      });
+
+      const fallbackFeedback = {
+        interviewId: interviewId,
+        userId: userId,
+        totalScore: fallbackObject.totalScore,
+        categoryScores: fallbackObject.categoryScores,
+        strengths: fallbackObject.strengths,
+        areasForImprovement: fallbackObject.areasForImprovement,
+        finalAssessment: fallbackObject.finalAssessment,
+        questionAnswers: fallbackObject.questionAnswers || [],
+        createdAt: new Date().toISOString(),
+      };
+
+      let feedbackRef = feedbackId 
+        ? db.collection("feedback").doc(feedbackId)
+        : db.collection("feedback").doc();
+      
+      await feedbackRef.set(fallbackFeedback);
+      return { success: true, feedbackId: feedbackRef.id };
+
+    } catch (fallbackError) {
+      console.error("Fallback generation also failed:", fallbackError);
+      const ultimateFallback = {
+        interviewId: interviewId,
+        userId: userId,
+        totalScore: 70, // Generic passing score
+        categoryScores: [
+          { name: "Communication Skills", score: 70, comment: "AI Feedback unavailable due to rate limits." },
+          { name: "Technical Knowledge", score: 70, comment: "AI Feedback unavailable." },
+          { name: "Problem Solving", score: 70, comment: "AI Feedback unavailable." },
+          { name: "Cultural Fit", score: 70, comment: "AI Feedback unavailable." },
+          { name: "Confidence and Clarity", score: 70, comment: "AI Feedback unavailable." },
+        ],
+        strengths: ["Completed the interview successfully."],
+        areasForImprovement: ["Gemini AI limit reached - try again later for detailed feedback."],
+        finalAssessment: "Due to temporary high traffic (Google AI Rate Limits), we could not generate a detailed personalized assessment for this session. Please check back later!",
+        questionAnswers: questions ? questions.map((q: string) => ({ question: q, answer: "Ideal answer unavailable due to AI limits." })) : [],
+        createdAt: new Date().toISOString(),
+      };
+
+      let feedbackRef = feedbackId 
+        ? db.collection("feedback").doc(feedbackId)
+        : db.collection("feedback").doc();
+      
+      await feedbackRef.set(ultimateFallback);
+      return { success: true, feedbackId: feedbackRef.id };
     }
-
-    await feedbackRef.set(fallbackFeedback);
-    return { success: true, feedbackId: feedbackRef.id };
   }
 }
 
